@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.dmitry-solomadin.omanb",
+  "name": "omanb",
+  "version": "1.0.0",
+  "author": "dmitry-solomadin",
+  "description": "Search, preview, create and edit nb notes from the bar",
+  "kinds": ["bar-widget", "service"],
+  "entryPoints": { "barWidget": "Notes.qml", "service": "Shortcuts.qml" },
+  "barWidget": {
+    "displayName": "omanb",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
