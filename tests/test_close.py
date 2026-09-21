@@ -15,7 +15,7 @@ spec.loader.exec_module(close)
 
 
 class CloseEditor(unittest.TestCase):
-    token = "a" * 32
+    token = "0" * 32
 
     def read_text(self, path):
         if str(path).endswith("/comm"):
@@ -24,7 +24,7 @@ class CloseEditor(unittest.TestCase):
 
     def run_close(self, outcomes, clients=None, environments=None):
         if clients is None:
-            clients = [{"pid": 10, "class": "org.omarchy.omanb." + self.token}]
+            clients = [{"pid": 10, "class": "org.omarchy.omanb.s" + self.token}]
         if environments is None:
             environments = {42: ("OMANB_SESSION_TOKEN=" + self.token).encode()}
         client_result = subprocess.CompletedProcess([], 0, stdout=json.dumps(clients))
@@ -61,5 +61,5 @@ class CloseEditor(unittest.TestCase):
     def test_empty_plugin_terminal_uses_guarded_close(self):
         commands = self.run_close([None], environments={})
         self.assertEqual(commands[0][:2], ["hyprctl", "eval"])
-        self.assertIn("org.omarchy.omanb." + self.token, commands[0][2])
+        self.assertIn("org.omarchy.omanb.s" + self.token, commands[0][2])
         self.assertIn("w.pid == 10", commands[0][2])

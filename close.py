@@ -27,7 +27,7 @@ def descendants(pid):
 def close_window(pid, token):
     if pid <= 0 or not re.fullmatch(r"[0-9a-f]{32}", token):
         raise ValueError("Expected a window PID and omanb session token")
-    app_id = f"org.omarchy.omanb.{token}"
+    app_id = f"org.omarchy.omanb.s{token}"
     result = subprocess.run(["hyprctl", "-j", "clients"], capture_output=True,
                             text=True, check=True, timeout=5)
     if not any(window.get("pid") == pid and window.get("class") == app_id

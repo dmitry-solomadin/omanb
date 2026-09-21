@@ -93,8 +93,9 @@ def perform(action, selector):
         selector += ":"
     arguments = [selector] if selector else []
     token = uuid.uuid4().hex
+    # GApplication app-ID components must not start with a digit (Ghostty).
     # Pass the marker inside the terminal command, including for shared terminal servers.
-    os.execvp("omarchy-launch-tui", ["omarchy-launch-tui", f"--app-id=org.omarchy.omanb.{token}",
+    os.execvp("omarchy-launch-tui", ["omarchy-launch-tui", f"--app-id=org.omarchy.omanb.s{token}",
                                    "env", f"OMANB_SESSION_TOKEN={token}",
                                    nb_executable(), command, *arguments])
 

@@ -16,7 +16,7 @@ An Omarchy bar widget for [nb](https://github.com/xwmx/nb): search, preview, cre
 
 **Super+N** opens notes and **Super+Alt+N** creates a note. Each shortcut is registered automatically only if that combination is unused. Existing bindings take precedence. The plugin removes its own shortcuts when disabled or removed.
 
-**Super+W** asks Neovim to save before closing a plugin-launched terminal. Ordinary Neovim sessions and other windows retain their existing close behavior.
+**Super+W** asks Neovim to save before closing a plugin-launched terminal. Ordinary Neovim sessions and other windows retain their existing close behavior. If the Hyprland close integration is incompatible, Super+W falls back to its normal behavior.
 
 Switch notebooks with `nb notebooks use <name>`; list them with `nb notebooks`.
 

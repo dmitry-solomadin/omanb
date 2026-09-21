@@ -113,9 +113,9 @@ class NotesCLI(unittest.TestCase):
         (folder / "a; note.md").write_text("# A note")
         selector = "test:sub folder/a; note.md"
         command = self.run_helper("edit", selector)
-        self.assertRegex(command[0], r"^--app-id=org\.omarchy\.omanb\.[0-9a-f]{32}$")
+        self.assertRegex(command[0], r"^--app-id=org\.omarchy\.omanb\.s[0-9a-f]{32}$")
         self.assertEqual(command[1], "env")
-        self.assertEqual(command[2], "OMANB_SESSION_TOKEN=" + command[0].rsplit(".", 1)[1])
+        self.assertEqual(command[2], "OMANB_SESSION_TOKEN=" + command[0].rsplit(".", 1)[1][1:])
         self.assertEqual(command[3:], [str(self.root / "nb"), "edit", selector])
         self.assertEqual(self.run_helper("new", "another notebook")[-2:],
                          ["add", "another notebook:"])

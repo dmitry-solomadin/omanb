@@ -114,9 +114,9 @@ class SavePrompt(unittest.TestCase):
                      'assert(calls == 1 and ran == nil)')
 
     def test_plugin_window_routes_to_its_session_only(self):
-        token = "a" * 32
+        token = "0" * 32
         self.run_lua(self.setup, self.close_install(),
-                     f'window = {{ class = "org.omarchy.omanb.{token}", pid = 42 }}',
+                     f'window = {{ class = "org.omarchy.omanb.s{token}", pid = 42 }}',
                      'registry[9999]()', 'assert(calls == 0)',
                      f'assert(ran == "python3 \'/plugin directory/close.py\' 42 {token}")')
 
@@ -132,4 +132,72 @@ class SavePrompt(unittest.TestCase):
     def test_hot_reload_does_not_double_wrap_or_restore_too_early(self):
         self.run_lua(self.setup, self.close_install("old"), self.close_install("new"),
                      'omanb_release_shortcuts("old")', 'assert(registry[9999] ~= original)',
-                     'omanb_release_shortcuts("new")', 'assert(registry[9999] == original)')
+                      'omanb_release_shortcuts("new")', 'assert(registry[9999] == original)')
+
+    def test_unknown_binding_formats_leave_close_and_open_new_working(self):
+        for binding in [{"dispatcher": "killactive", "arg": ""},
+                        {"dispatcher": "__lua_v2", "arg": "9999"},
+                        {"dispatcher": "__lua", "arg": "callback:9999"},
+                        {"dispatcher": "__lua", "arg": "0"},
+                        {"dispatcher": "__lua", "arg": "9" * 5000}]:
+            with self.subTest(binding=binding):
+                script = shortcuts.install_script("close", "test.omanb", COMMANDS,
+                    [{"modmask": 64, "key": "W", **binding}], Path("/plugin"))
+                self.run_lua(self.setup, script,
+                             'assert(count() == 2 and registry[9999] == original)')
+
+    def test_missing_or_changed_registry_skips_optional_integration(self):
+        for change in ['debug = nil', 'debug.getregistry = nil',
+                       'debug.getregistry = function() error("API changed") end',
+                       'debug.getregistry = function() return false end',
+                       'registry[9999] = { callback = original }',
+                       'hl.get_active_window = nil', 'hl.exec_cmd = nil']:
+            with self.subTest(change=change):
+                script = shortcuts.install_script("close", "test.omanb", COMMANDS,
+                    [{"modmask": 64, "key": "W", "dispatcher": "__lua", "arg": "9999"}], Path("/plugin"))
+                self.run_lua(self.setup, change, 'local before = registry[9999]', script,
+                             'assert(count() == 2 and registry[9999] == before)',
+                             'omanb_release_shortcuts("close")', 'assert(count() == 0)')
+
+    def test_all_close_callbacks_checked_before_wrapping(self):
+        bindings = [{"modmask": 64, "key": "W", "dispatcher": "__lua", "arg": str(ref)}
+                    for ref in (9999, 9998)]
+        script = shortcuts.install_script("close", "test.omanb", COMMANDS, bindings, Path("/plugin"))
+        self.run_lua(self.setup, 'registry[9998] = nil', script,
+                     'assert(registry[9999] == original and count() == 2)')
+
+    def test_runtime_api_failures_fall_back_to_original_once(self):
+        for change in ['hl.get_active_window = nil',
+                       'hl.get_active_window = function() error("API changed") end',
+                       'window = { class = 123 }',
+                       'window.pid = nil', 'window.pid = "42"', 'window.pid = -1',
+                       'hl.exec_cmd = nil',
+                       'hl.exec_cmd = function() error("API changed") end',
+                       'hl.exec_cmd = function() return false end']:
+            with self.subTest(change=change):
+                self.run_lua(self.setup, self.close_install(),
+                    'window = { class = "org.omarchy.omanb.s' + '0' * 32 + '", pid = 42 }',
+                    change, 'assert(registry[9999]("result") == "result")',
+                    'assert(calls == 1 and ran == nil)',
+                    'omanb_release_shortcuts("close")', 'assert(registry[9999] == original)')
+
+    def test_original_arguments_returns_and_errors_are_preserved(self):
+        self.run_lua(self.setup,
+                     'original = function(...) calls = calls + 1; return ... end; registry[9999] = original',
+                     self.close_install(), 'hl.get_active_window = nil',
+                     'local a, b, c = registry[9999]("first", nil, "third")',
+                     'assert(a == "first" and b == nil and c == "third" and calls == 1)')
+        self.run_lua(self.setup,
+                     'registry[9999] = function() calls = calls + 1; error("original failure") end',
+                     self.close_install(), 'hl.get_active_window = nil',
+                     'local ok, err = pcall(registry[9999])',
+                     'assert(not ok and err:find("original failure", 1, true) and calls == 1)')
+
+    def test_unbound_close_uses_public_default_on_runtime_failure(self):
+        script = shortcuts.install_script("close", "test.omanb", [], [], Path("/plugin"))
+        self.run_lua(self.setup,
+                     'hl.dsp.window = { close = function() return "default close" end }',
+                     'hl.dispatch = function(action) assert(action == "default close"); calls = calls + 1 end',
+                     script, 'assert(count() == 1)', 'hl.get_active_window = nil',
+                     'for handle in pairs(active) do handle.command() end',
+                     'assert(calls == 1)', 'omanb_release_shortcuts("close")', 'assert(count() == 0)')

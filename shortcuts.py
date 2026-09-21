@@ -51,21 +51,39 @@ def occupied(bindings, mask):
 
 
 def close_script(directory, bindings):
-    command = lua_string(shlex.join(["python3", str(directory / "close.py")]))
-    script = f"""
-      local function close_note(original, ...)
-        local window = hl.get_active_window()
-        local session = window and window.class:match("^org%.omarchy%.omanb%.([0-9a-f]+)$")
-        if session and #session == 32 then
-          hl.exec_cmd({command} .. " " .. window.pid .. " " .. session)
-          return
-        end
-        return original(...)
-      end
-    """
     matches = [binding for binding in bindings
                if binding.get("modmask") == 64
                and (binding.get("key", "").lower() in ("w", "code:25") or binding.get("keycode") == 25)]
+    # Unknown binding formats must not prevent the open/new shortcuts installing.
+    references = []
+    for binding in matches:
+        reference = str(binding.get("arg", ""))
+        if (binding.get("dispatcher") != "__lua" or len(reference) > 10 or not reference.isascii()
+                or not reference.isdecimal() or not 0 < int(reference) <= 2147483647):
+            return ""
+        references.append(int(reference))
+
+    command = lua_string(shlex.join(["python3", str(directory / "close.py")]))
+    script = f"""
+    -- Save-on-close is optional; compatibility failures leave normal closing intact.
+    pcall(function()
+      if type(hl.get_active_window) ~= "function" or type(hl.exec_cmd) ~= "function" then return end
+      local function close_note(original, ...)
+        local ok, handled = pcall(function()
+          local window = hl.get_active_window()
+          if not window or type(window.class) ~= "string" then return false end
+          local session = window.class:match("^org%.omarchy%.omanb%.s([0-9a-f]+)$")
+          if not session or #session ~= 32 then return false end
+          local pid = window.pid
+          if type(pid) ~= "number" or pid <= 0 or pid % 1 ~= 0 then return false end
+          if hl.exec_cmd({command} .. " " .. string.format("%.0f", pid) .. " " .. session) == false then return false end
+          return true
+        end)
+        if ok and handled then return end
+        -- Keep the original outside pcall: never swallow its errors or call it twice.
+        return original(...)
+      end
+    """
     if not matches:
         return script + """
           if not group.handles.close then
@@ -73,35 +91,39 @@ def close_script(directory, bindings):
               return close_note(function() hl.dispatch(hl.dsp.window.close()) end)
             end, { description = "Close window (omanb: ask to save)" })
           end
+        end)
         """
 
     # Lua bindings call their registry function by reference. Wrapping that function
     # preserves the user's key, flags, ordering, and original non-omanb action.
-    for binding in matches:
-        reference = str(binding.get("arg", ""))
-        if binding.get("dispatcher") != "__lua" or not reference.isdecimal():
-            raise RuntimeError("Save-on-close requires a Lua Super+W binding")
+    script += """
+      if type(debug) ~= "table" or type(debug.getregistry) ~= "function" then return end
+      local registry = debug.getregistry()
+      if type(registry) ~= "table" then return end
+    """
+    # Preflight every target before changing any callback, including duplicate binds.
+    for reference in references:
+        script += f'\n      if type(rawget(registry, {reference})) ~= "function" then return end\n'
+    for reference in dict.fromkeys(references):
         script += f"""
           do
-            local registry = debug.getregistry()
-            local ref = {int(reference)}
+            local ref = {reference}
             local key = "close:" .. ref
             local previous = group.handles[key]
-            if not previous or registry[ref] ~= previous.callback then
-              local original = registry[ref]
-              assert(type(original) == "function", "Cannot wrap Super+W")
+            if not previous or rawget(registry, ref) ~= previous.callback then
+              local original = rawget(registry, ref)
               local wrapper = function(...) return close_note(original, ...) end
-              registry[ref] = wrapper
+              rawset(registry, ref, wrapper)
               group.handles[key] = {{
                 callback = wrapper,
                 remove = function()
-                  if registry[ref] == wrapper then registry[ref] = original end
+                  if rawget(registry, ref) == wrapper then rawset(registry, ref, original) end
                 end
               }}
             end
           end
         """
-    return script
+    return script + "\nend)"
 
 
 def install_script(token, plugin_id, commands, bindings, directory=None):
